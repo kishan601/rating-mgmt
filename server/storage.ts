@@ -1,5 +1,6 @@
-import { type User, type InsertUser, type Store, type InsertStore, type Rating } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { type User, type InsertUser, type Store, type InsertStore, type Rating, users, stores, ratings } from "@shared/schema";
+import { db } from "./db";
+import { eq, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -19,107 +20,85 @@ export interface IStorage {
   getStats(): Promise<{ totalUsers: number; totalStores: number; totalRatings: number }>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private stores: Map<string, Store>;
-  private ratings: Map<string, Rating>;
-
-  constructor() {
-    this.users = new Map();
-    this.stores = new Map();
-    this.ratings = new Map();
-  }
-
+export class DbStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result[0];
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email === email,
-    );
+    const result = await db.select().from(users).where(eq(users.email, email));
+    return result[0];
   }
 
   async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return db.select().from(users);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { 
-      ...insertUser, 
-      id, 
+    const result = await db.insert(users).values({
+      ...insertUser,
       role: insertUser.role || "user",
-      createdAt: new Date() 
-    };
-    this.users.set(id, user);
-    return user;
+    }).returning();
+    return result[0];
   }
 
   async updateUser(id: string, updates: Partial<InsertUser>): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-
-    const updatedUser: User = {
-      ...user,
-      ...updates,
-    };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    const result = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return result[0];
   }
 
   async deleteUser(id: string): Promise<boolean> {
-    return this.users.delete(id);
+    const result = await db.delete(users).where(eq(users.id, id)).returning();
+    return result.length > 0;
   }
 
   async getStore(id: string): Promise<Store | undefined> {
-    return this.stores.get(id);
+    const result = await db.select().from(stores).where(eq(stores.id, id));
+    return result[0];
   }
 
   async getStoreByEmail(email: string): Promise<Store | undefined> {
-    return Array.from(this.stores.values()).find(
-      (store) => store.email === email,
-    );
+    const result = await db.select().from(stores).where(eq(stores.email, email));
+    return result[0];
   }
 
   async getAllStores(): Promise<Store[]> {
-    return Array.from(this.stores.values());
+    return db.select().from(stores);
   }
 
   async createStore(insertStore: InsertStore): Promise<Store> {
-    const id = randomUUID();
-    const store: Store = {
-      ...insertStore,
-      id,
-      createdAt: new Date()
-    };
-    this.stores.set(id, store);
-    return store;
+    const result = await db.insert(stores).values(insertStore).returning();
+    return result[0];
   }
 
   async updateStore(id: string, updates: Partial<InsertStore>): Promise<Store | undefined> {
-    const store = this.stores.get(id);
-    if (!store) return undefined;
-
-    const updatedStore: Store = {
-      ...store,
-      ...updates,
-    };
-    this.stores.set(id, updatedStore);
-    return updatedStore;
+    const result = await db.update(stores)
+      .set(updates)
+      .where(eq(stores.id, id))
+      .returning();
+    return result[0];
   }
 
   async deleteStore(id: string): Promise<boolean> {
-    return this.stores.delete(id);
+    const result = await db.delete(stores).where(eq(stores.id, id)).returning();
+    return result.length > 0;
   }
 
   async getStats(): Promise<{ totalUsers: number; totalStores: number; totalRatings: number }> {
+    const [userCount] = await db.select({ count: sql<number>`count(*)::int` }).from(users);
+    const [storeCount] = await db.select({ count: sql<number>`count(*)::int` }).from(stores);
+    const [ratingCount] = await db.select({ count: sql<number>`count(*)::int` }).from(ratings);
+
     return {
-      totalUsers: this.users.size,
-      totalStores: this.stores.size,
-      totalRatings: this.ratings.size,
+      totalUsers: userCount.count || 0,
+      totalStores: storeCount.count || 0,
+      totalRatings: ratingCount.count || 0,
     };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();
