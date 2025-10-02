@@ -6,11 +6,16 @@ import DataTable from "@/components/DataTable";
 import PasswordUpdateDialog from "@/components/PasswordUpdateDialog";
 import StarRating from "@/components/StarRating";
 import ThemeToggle from "@/components/ThemeToggle";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 export default function StoreDashboard() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentStore, setCurrentStore] = useState<any>(null);
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const user = localStorage.getItem("currentUser");
@@ -18,6 +23,28 @@ export default function StoreDashboard() {
       setCurrentStore(JSON.parse(user));
     }
   }, []);
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/logout", {});
+      return await res.json();
+    },
+    onSuccess: () => {
+      localStorage.removeItem("currentUser");
+      setLocation("/");
+      toast({
+        title: "Success",
+        description: "Logged out successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to logout",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: ratings = [], isLoading: ratingsLoading } = useQuery<any[]>({
     queryKey: [`/api/stores/${currentStore?.id}/ratings`],
@@ -51,7 +78,12 @@ export default function StoreDashboard() {
             >
               <Settings className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" data-testid="button-logout">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => logoutMutation.mutate()}
+              data-testid="button-logout"
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </div>

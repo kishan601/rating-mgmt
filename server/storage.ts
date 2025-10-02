@@ -19,7 +19,7 @@ export interface IStorage {
   deleteStore(id: string): Promise<boolean>;
   
   submitRating(rating: InsertRating): Promise<Rating>;
-  updateRating(id: string, ratingValue: number): Promise<Rating | undefined>;
+  updateRating(id: string, ratingValue: number, userId: string): Promise<Rating | undefined>;
   getRatingsByStore(storeId: string): Promise<Rating[]>;
   getRatingsByUser(userId: string): Promise<Rating[]>;
   getUserRatingForStore(userId: string, storeId: string): Promise<Rating | undefined>;
@@ -143,13 +143,13 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async updateRating(id: string, ratingValue: number): Promise<Rating | undefined> {
+  async updateRating(id: string, ratingValue: number, userId: string): Promise<Rating | undefined> {
     const result = await db.update(ratings)
       .set({ 
         rating: ratingValue,
         updatedAt: new Date()
       })
-      .where(eq(ratings.id, id))
+      .where(and(eq(ratings.id, id), eq(ratings.userId, userId)))
       .returning();
     return result[0];
   }

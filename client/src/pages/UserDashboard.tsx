@@ -9,6 +9,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 type StoreWithRating = {
   id: string;
@@ -26,6 +27,7 @@ export default function UserDashboard() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const user = localStorage.getItem("currentUser");
@@ -33,6 +35,28 @@ export default function UserDashboard() {
       setCurrentUser(JSON.parse(user));
     }
   }, []);
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/logout", {});
+      return await res.json();
+    },
+    onSuccess: () => {
+      localStorage.removeItem("currentUser");
+      setLocation("/");
+      toast({
+        title: "Success",
+        description: "Logged out successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to logout",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: stores = [], isLoading } = useQuery<StoreWithRating[]>({
     queryKey: [`/api/stores-with-ratings`],
@@ -71,7 +95,6 @@ export default function UserDashboard() {
   const submitRatingMutation = useMutation({
     mutationFn: async ({ storeId, rating }: { storeId: string; rating: number }) => {
       const res = await apiRequest("POST", "/api/ratings", {
-        userId: currentUser?.id,
         storeId,
         rating,
       });
@@ -118,7 +141,12 @@ export default function UserDashboard() {
             >
               <Settings className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" data-testid="button-logout">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => logoutMutation.mutate()}
+              data-testid="button-logout"
+            >
               <LogOut className="h-5 w-5" />
             </Button>
           </div>

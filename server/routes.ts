@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertStoreSchema, insertRatingSchema } from "@shared/schema";
@@ -9,6 +9,32 @@ const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 });
+
+declare module 'express-session' {
+  interface SessionData {
+    userId: string;
+    role: string;
+  }
+}
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  next();
+}
+
+function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    if (!roles.includes(req.session.role || "")) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
+    next();
+  };
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Signup endpoint
@@ -73,11 +99,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        const { password: _, ...userWithoutPassword } = user;
-        return res.status(200).json({ 
-          message: "Login successful", 
-          user: userWithoutPassword 
+        req.session.regenerate((err) => {
+          if (err) {
+            return res.status(500).json({ message: "Session error" });
+          }
+
+          req.session.userId = user.id;
+          req.session.role = user.role;
+
+          const { password: _, ...userWithoutPassword } = user;
+          return res.status(200).json({ 
+            message: "Login successful", 
+            user: userWithoutPassword 
+          });
         });
+        return;
       }
 
       // If not found in users, try stores
@@ -88,14 +124,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        const { password: _, ...storeWithoutPassword } = store;
-        return res.status(200).json({ 
-          message: "Login successful", 
-          user: { 
-            ...storeWithoutPassword, 
-            role: "store"
-          } 
+        req.session.regenerate((err) => {
+          if (err) {
+            return res.status(500).json({ message: "Session error" });
+          }
+
+          req.session.userId = store.id;
+          req.session.role = "store";
+
+          const { password: _, ...storeWithoutPassword } = store;
+          return res.status(200).json({ 
+            message: "Login successful", 
+            user: { 
+              ...storeWithoutPassword, 
+              role: "store"
+            } 
+          });
         });
+        return;
       }
 
       return res.status(401).json({ message: "Invalid email or password" });
@@ -105,8 +151,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Logout endpoint
+  app.post("/api/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Failed to logout" });
+      }
+      res.clearCookie("connect.sid");
+      return res.status(200).json({ message: "Logged out successfully" });
+    });
+  });
+
   // Get all users (Admin only)
-  app.get("/api/users", async (req, res) => {
+  app.get("/api/users", requireRole("admin"), async (req, res) => {
     try {
       const users = await storage.getAllUsers();
       const usersWithoutPasswords = users.map(({ password, ...user }) => user);
@@ -118,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user by ID (Admin only)
-  app.get("/api/users/:id", async (req, res) => {
+  app.get("/api/users/:id", requireRole("admin"), async (req, res) => {
     try {
       const user = await storage.getUser(req.params.id);
       if (!user) {
@@ -133,7 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create user (Admin only)
-  app.post("/api/users", async (req, res) => {
+  app.post("/api/users", requireRole("admin"), async (req, res) => {
     try {
       const result = insertUserSchema.safeParse(req.body);
       
@@ -173,7 +230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update user (Admin only)
-  app.put("/api/users/:id", async (req, res) => {
+  app.put("/api/users/:id", requireRole("admin"), async (req, res) => {
     try {
       const updates = req.body;
       
@@ -198,7 +255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete user (Admin only)
-  app.delete("/api/users/:id", async (req, res) => {
+  app.delete("/api/users/:id", requireRole("admin"), async (req, res) => {
     try {
       const deleted = await storage.deleteUser(req.params.id);
       if (!deleted) {
@@ -239,7 +296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create store (Admin only)
-  app.post("/api/stores", async (req, res) => {
+  app.post("/api/stores", requireRole("admin"), async (req, res) => {
     try {
       const result = insertStoreSchema.safeParse(req.body);
       
@@ -278,7 +335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update store (Admin only)
-  app.put("/api/stores/:id", async (req, res) => {
+  app.put("/api/stores/:id", requireRole("admin"), async (req, res) => {
     try {
       const updates = req.body;
       
@@ -303,7 +360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete store (Admin only)
-  app.delete("/api/stores/:id", async (req, res) => {
+  app.delete("/api/stores/:id", requireRole("admin"), async (req, res) => {
     try {
       const deleted = await storage.deleteStore(req.params.id);
       if (!deleted) {
@@ -317,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get dashboard stats (Admin only)
-  app.get("/api/stats", async (req, res) => {
+  app.get("/api/stats", requireRole("admin"), async (req, res) => {
     try {
       const stats = await storage.getStats();
       return res.status(200).json(stats);
@@ -339,21 +396,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Submit or update rating
-  app.post("/api/ratings", async (req, res) => {
+  app.post("/api/ratings", requireAuth, async (req, res) => {
     try {
-      const result = insertRatingSchema.safeParse(req.body);
+      const { storeId, rating } = req.body;
       
-      if (!result.success) {
+      if (!storeId || typeof rating !== 'number' || rating < 1 || rating > 5) {
         return res.status(400).json({ 
-          message: "Validation error", 
-          errors: result.error.flatten().fieldErrors 
+          message: "Invalid request. storeId and rating (1-5) are required" 
         });
       }
 
-      const rating = await storage.submitRating(result.data);
+      const ratingData = await storage.submitRating({
+        userId: req.session.userId!,
+        storeId,
+        rating
+      });
+      
       return res.status(201).json({ 
         message: "Rating submitted successfully", 
-        rating 
+        rating: ratingData 
       });
     } catch (error) {
       console.error("Submit rating error:", error);
@@ -362,7 +423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update rating
-  app.put("/api/ratings/:id", async (req, res) => {
+  app.put("/api/ratings/:id", requireAuth, async (req, res) => {
     try {
       const { rating: ratingValue } = req.body;
       
@@ -370,9 +431,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Rating must be a number between 1 and 5" });
       }
 
-      const rating = await storage.updateRating(req.params.id, ratingValue);
+      const rating = await storage.updateRating(req.params.id, ratingValue, req.session.userId!);
       if (!rating) {
-        return res.status(404).json({ message: "Rating not found" });
+        return res.status(404).json({ message: "Rating not found or unauthorized" });
       }
 
       return res.status(200).json({ 
