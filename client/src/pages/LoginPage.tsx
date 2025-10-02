@@ -42,6 +42,8 @@ export default function LoginPage() {
       return await res.json();
     },
     onSuccess: (data: any) => {
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
+      
       toast({
         title: "Success",
         description: "Logged in successfully!",

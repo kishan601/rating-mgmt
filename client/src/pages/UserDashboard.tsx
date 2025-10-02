@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Store, LogOut, Settings, Search } from "lucide-react";
 import StoreCard from "@/components/StoreCard";
 import RatingDialog from "@/components/RatingDialog";
@@ -6,33 +6,94 @@ import PasswordUpdateDialog from "@/components/PasswordUpdateDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
-//todo: remove mock functionality
-const mockStores = [
-  { id: '1', name: 'Downtown Electronics Store', address: '123 Tech Street, Downtown Area', averageRating: 4.5, userRating: 5 },
-  { id: '2', name: 'Westside Fashion Boutique', address: '456 Fashion Avenue, West Side', averageRating: 3.8, userRating: undefined },
-  { id: '3', name: 'Northside Grocery Market', address: '789 Market Road, Northside District', averageRating: 4.2, userRating: 4 },
-  { id: '4', name: 'Eastside Coffee and Books', address: '321 Reading Lane, Eastside', averageRating: 4.7, userRating: undefined },
-];
+type StoreWithRating = {
+  id: string;
+  name: string;
+  email: string;
+  address: string;
+  averageRating: number;
+  createdAt: string;
+};
 
 export default function UserDashboard() {
   const [searchTerm, setSearchTerm] = useState("");
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
-  const [selectedStore, setSelectedStore] = useState<typeof mockStores[0] | null>(null);
+  const [selectedStore, setSelectedStore] = useState<StoreWithRating | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { toast } = useToast();
 
-  const filteredStores = mockStores.filter(store =>
-    store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    store.address.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (user) {
+      setCurrentUser(JSON.parse(user));
+    }
+  }, []);
+
+  const { data: stores = [], isLoading } = useQuery<StoreWithRating[]>({
+    queryKey: ["/api/stores-with-ratings"],
+  });
+
+  const { data: userRatings = [] } = useQuery<any[]>({
+    queryKey: ["/api/users", currentUser?.id, "ratings"],
+    enabled: !!currentUser?.id,
+  });
+
+  const filteredStores = useMemo(() => {
+    return stores.filter(store =>
+      store.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      store.address.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [stores, searchTerm]);
+
+  const storesWithUserRatings = useMemo(() => {
+    return filteredStores.map(store => {
+      const userRating = userRatings.find(r => r.storeId === store.id);
+      return {
+        ...store,
+        userRating: userRating?.rating,
+      };
+    });
+  }, [filteredStores, userRatings]);
 
   const handleRateStore = (storeId: string) => {
-    const store = mockStores.find(s => s.id === storeId);
+    const store = stores.find(s => s.id === storeId);
     if (store) {
       setSelectedStore(store);
       setRatingDialogOpen(true);
     }
   };
+
+  const submitRatingMutation = useMutation({
+    mutationFn: async ({ storeId, rating }: { storeId: string; rating: number }) => {
+      const res = await apiRequest("POST", "/api/ratings", {
+        userId: currentUser?.id,
+        storeId,
+        rating,
+      });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users", currentUser?.id, "ratings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stores-with-ratings"] });
+      toast({
+        title: "Success",
+        description: "Rating submitted successfully",
+      });
+      setRatingDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to submit rating",
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,24 +137,32 @@ export default function UserDashboard() {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStores.map((store) => (
-            <StoreCard
-              key={store.id}
-              id={store.id}
-              name={store.name}
-              address={store.address}
-              averageRating={store.averageRating}
-              userRating={store.userRating}
-              onRate={handleRateStore}
-            />
-          ))}
-        </div>
-
-        {filteredStores.length === 0 && (
+        {isLoading ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No stores found matching your search.</p>
+            <p className="text-muted-foreground">Loading stores...</p>
           </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {storesWithUserRatings.map((store) => (
+                <StoreCard
+                  key={store.id}
+                  id={store.id}
+                  name={store.name}
+                  address={store.address}
+                  averageRating={store.averageRating}
+                  userRating={store.userRating}
+                  onRate={handleRateStore}
+                />
+              ))}
+            </div>
+
+            {storesWithUserRatings.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No stores found matching your search.</p>
+              </div>
+            )}
+          </>
         )}
       </main>
 
@@ -102,10 +171,9 @@ export default function UserDashboard() {
           open={ratingDialogOpen}
           onOpenChange={setRatingDialogOpen}
           storeName={selectedStore.name}
-          currentRating={selectedStore.userRating}
+          currentRating={storesWithUserRatings.find(s => s.id === selectedStore.id)?.userRating}
           onSubmit={(rating) => {
-            console.log('Rating submitted for store:', selectedStore.id, 'Rating:', rating);
-            setRatingDialogOpen(false);
+            submitRatingMutation.mutate({ storeId: selectedStore.id, rating });
           }}
         />
       )}
