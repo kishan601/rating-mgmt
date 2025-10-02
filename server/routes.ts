@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertStoreSchema } from "@shared/schema";
+import { insertUserSchema, insertStoreSchema, insertRatingSchema } from "@shared/schema";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 
@@ -304,6 +304,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json(stats);
     } catch (error) {
       console.error("Get stats error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get all stores with ratings
+  app.get("/api/stores-with-ratings", async (req, res) => {
+    try {
+      const stores = await storage.getAllStoresWithRatings();
+      return res.status(200).json(stores);
+    } catch (error) {
+      console.error("Get stores with ratings error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Submit or update rating
+  app.post("/api/ratings", async (req, res) => {
+    try {
+      const result = insertRatingSchema.safeParse(req.body);
+      
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: result.error.flatten().fieldErrors 
+        });
+      }
+
+      const rating = await storage.submitRating(result.data);
+      return res.status(201).json({ 
+        message: "Rating submitted successfully", 
+        rating 
+      });
+    } catch (error) {
+      console.error("Submit rating error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Update rating
+  app.put("/api/ratings/:id", async (req, res) => {
+    try {
+      const { rating: ratingValue } = req.body;
+      
+      if (typeof ratingValue !== 'number' || ratingValue < 1 || ratingValue > 5) {
+        return res.status(400).json({ message: "Rating must be a number between 1 and 5" });
+      }
+
+      const rating = await storage.updateRating(req.params.id, ratingValue);
+      if (!rating) {
+        return res.status(404).json({ message: "Rating not found" });
+      }
+
+      return res.status(200).json({ 
+        message: "Rating updated successfully", 
+        rating 
+      });
+    } catch (error) {
+      console.error("Update rating error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get ratings for a store with user details
+  app.get("/api/stores/:id/ratings", async (req, res) => {
+    try {
+      const ratings = await storage.getRatingsByStore(req.params.id);
+      
+      const ratingsWithUserDetails = await Promise.all(
+        ratings.map(async (rating) => {
+          const user = await storage.getUser(rating.userId);
+          return {
+            ...rating,
+            userName: user?.name || "Unknown",
+            userEmail: user?.email || "Unknown",
+          };
+        })
+      );
+
+      return res.status(200).json(ratingsWithUserDetails);
+    } catch (error) {
+      console.error("Get store ratings error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get ratings by user
+  app.get("/api/users/:userId/ratings", async (req, res) => {
+    try {
+      const ratings = await storage.getRatingsByUser(req.params.userId);
+      return res.status(200).json(ratings);
+    } catch (error) {
+      console.error("Get user ratings error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get user's rating for a specific store
+  app.get("/api/users/:userId/stores/:storeId/rating", async (req, res) => {
+    try {
+      const rating = await storage.getUserRatingForStore(req.params.userId, req.params.storeId);
+      return res.status(200).json(rating || null);
+    } catch (error) {
+      console.error("Get user store rating error:", error);
       return res.status(500).json({ message: "Internal server error" });
     }
   });
