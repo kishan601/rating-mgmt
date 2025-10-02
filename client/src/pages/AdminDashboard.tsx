@@ -155,6 +155,27 @@ export default function AdminDashboard() {
     },
   });
 
+  const updatePasswordMutation = useMutation({
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      const res = await apiRequest("PUT", "/api/update-password", data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      });
+      setPasswordOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 bg-background z-10">
@@ -170,7 +191,12 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="icon" data-testid="button-settings">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setPasswordOpen(true)}
+              data-testid="button-settings"
+            >
               <Settings className="h-5 w-5" />
             </Button>
             <Button 
@@ -300,7 +326,7 @@ export default function AdminDashboard() {
       <PasswordUpdateDialog
         open={passwordOpen}
         onOpenChange={setPasswordOpen}
-        onSubmit={(data) => console.log('Password updated:', data)}
+        onSubmit={(data) => updatePasswordMutation.mutate(data)}
       />
     </div>
   );

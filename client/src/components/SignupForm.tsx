@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 
 const signupSchema = z.object({
-  accountType: z.enum(["user", "store"], {
+  accountType: z.enum(["user", "store", "admin"], {
     required_error: "Please select an account type",
   }),
   name: z.string().min(20, "Name must be at least 20 characters").max(60, "Name must not exceed 60 characters"),
@@ -77,6 +77,9 @@ export default function SignupForm({ onSubmit, onLoginClick }: SignupFormProps) 
                   </SelectItem>
                   <SelectItem value="store" data-testid="option-store">
                     Store Owner
+                  </SelectItem>
+                  <SelectItem value="admin" data-testid="option-admin">
+                    System Administrator
                   </SelectItem>
                 </SelectContent>
               </Select>

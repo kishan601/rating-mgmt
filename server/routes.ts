@@ -42,7 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { accountType, email, password, name, address, confirmPassword } = req.body;
 
-      if (!accountType || (accountType !== "user" && accountType !== "store")) {
+      if (!accountType || (accountType !== "user" && accountType !== "store" && accountType !== "admin")) {
         return res.status(400).json({ message: "Invalid account type" });
       }
 
@@ -79,8 +79,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Store account created successfully", 
           user: { ...storeWithoutPassword, role: "store" }
         });
+      } else if (accountType === "admin") {
+        // Validate as admin user
+        const adminResult = insertUserSchema.safeParse({ email, password, name, address, role: "admin" });
+        
+        if (!adminResult.success) {
+          return res.status(400).json({ 
+            message: "Validation error", 
+            errors: adminResult.error.flatten().fieldErrors 
+          });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const admin = await storage.createUser({
+          email,
+          password: hashedPassword,
+          name,
+          address,
+          role: "admin"
+        });
+
+        const { password: _, ...adminWithoutPassword } = admin;
+        return res.status(201).json({ 
+          message: "Admin account created successfully", 
+          user: adminWithoutPassword 
+        });
       } else {
-        // Validate as user
+        // Validate as normal user
         const userResult = insertUserSchema.safeParse({ email, password, name, address });
         
         if (!userResult.success) {
@@ -195,6 +221,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.clearCookie("connect.sid");
       return res.status(200).json({ message: "Logged out successfully" });
     });
+  });
+
+  // Update own password endpoint
+  app.put("/api/update-password", requireAuth, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+
+      // Validate new password
+      const passwordRegex = /^(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>]).{8,16}$/;
+      if (!passwordRegex.test(newPassword)) {
+        return res.status(400).json({ 
+          message: "New password must be 8-16 characters with at least one uppercase letter and one special character" 
+        });
+      }
+
+      const userId = req.session.userId!;
+      const userRole = req.session.role!;
+
+      // Get user or store based on role
+      let currentUser;
+      if (userRole === "store") {
+        currentUser = await storage.getStore(userId);
+      } else {
+        currentUser = await storage.getUser(userId);
+      }
+
+      if (!currentUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password
+      const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update password
+      if (userRole === "store") {
+        await storage.updateStore(userId, { password: hashedPassword });
+      } else {
+        await storage.updateUser(userId, { password: hashedPassword });
+      }
+
+      return res.status(200).json({ message: "Password updated successfully" });
+    } catch (error) {
+      console.error("Update password error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
   });
 
   // Get all users (Admin only)

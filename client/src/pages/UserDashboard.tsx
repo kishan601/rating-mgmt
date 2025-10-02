@@ -118,6 +118,27 @@ export default function UserDashboard() {
     },
   });
 
+  const updatePasswordMutation = useMutation({
+    mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
+      const res = await apiRequest("PUT", "/api/update-password", data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+      });
+      setPasswordOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 bg-background z-10">
@@ -209,7 +230,7 @@ export default function UserDashboard() {
       <PasswordUpdateDialog
         open={passwordOpen}
         onOpenChange={setPasswordOpen}
-        onSubmit={(data) => console.log('Password updated:', data)}
+        onSubmit={(data) => updatePasswordMutation.mutate(data)}
       />
     </div>
   );
