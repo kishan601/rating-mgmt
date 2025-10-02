@@ -51,7 +51,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Login endpoint
+  // Login endpoint (for both users and stores)
   app.post("/api/login", async (req, res) => {
     try {
       const result = loginSchema.safeParse(req.body);
@@ -65,21 +65,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { email, password } = result.data;
 
+      // First, try to find user
       const user = await storage.getUserByEmail(email);
-      if (!user) {
-        return res.status(401).json({ message: "Invalid email or password" });
+      if (user) {
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: "Invalid email or password" });
+        }
+
+        const { password: _, ...userWithoutPassword } = user;
+        return res.status(200).json({ 
+          message: "Login successful", 
+          user: userWithoutPassword 
+        });
       }
 
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        return res.status(401).json({ message: "Invalid email or password" });
+      // If not found in users, try stores
+      const store = await storage.getStoreByEmail(email);
+      if (store) {
+        const isPasswordValid = await bcrypt.compare(password, store.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: "Invalid email or password" });
+        }
+
+        const { password: _, ...storeWithoutPassword } = store;
+        return res.status(200).json({ 
+          message: "Login successful", 
+          user: { 
+            ...storeWithoutPassword, 
+            role: "store"
+          } 
+        });
       }
 
-      const { password: _, ...userWithoutPassword } = user;
-      return res.status(200).json({ 
-        message: "Login successful", 
-        user: userWithoutPassword 
-      });
+      return res.status(401).json({ message: "Invalid email or password" });
     } catch (error) {
       console.error("Login error:", error);
       return res.status(500).json({ message: "Internal server error" });
