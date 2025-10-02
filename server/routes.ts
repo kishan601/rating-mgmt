@@ -40,37 +40,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Signup endpoint
   app.post("/api/signup", async (req, res) => {
     try {
-      const result = insertUserSchema.safeParse(req.body);
+      const { accountType, email, password, name, address, confirmPassword } = req.body;
+
+      if (!accountType || (accountType !== "user" && accountType !== "store")) {
+        return res.status(400).json({ message: "Invalid account type" });
+      }
+
+      // Check if email already exists in either table
+      const existingUser = await storage.getUserByEmail(email);
+      const existingStore = await storage.getStoreByEmail(email);
       
-      if (!result.success) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: result.error.flatten().fieldErrors 
+      if (existingUser || existingStore) {
+        return res.status(400).json({ message: "Email already registered" });
+      }
+
+      if (accountType === "store") {
+        // Validate as store
+        const storeResult = insertStoreSchema.safeParse({ email, password, name, address });
+        
+        if (!storeResult.success) {
+          return res.status(400).json({ 
+            message: "Validation error", 
+            errors: storeResult.error.flatten().fieldErrors 
+          });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const store = await storage.createStore({
+          email,
+          password: hashedPassword,
+          name,
+          address
+        });
+
+        const { password: _, ...storeWithoutPassword } = store;
+        return res.status(201).json({ 
+          message: "Store account created successfully", 
+          user: { ...storeWithoutPassword, role: "store" }
+        });
+      } else {
+        // Validate as user
+        const userResult = insertUserSchema.safeParse({ email, password, name, address });
+        
+        if (!userResult.success) {
+          return res.status(400).json({ 
+            message: "Validation error", 
+            errors: userResult.error.flatten().fieldErrors 
+          });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await storage.createUser({
+          email,
+          password: hashedPassword,
+          name,
+          address,
+          role: "user"
+        });
+
+        const { password: _, ...userWithoutPassword } = user;
+        return res.status(201).json({ 
+          message: "User account created successfully", 
+          user: userWithoutPassword 
         });
       }
-
-      const { email, password, name, address } = result.data;
-
-      const existingUser = await storage.getUserByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ message: "User with this email already exists" });
-      }
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      const user = await storage.createUser({
-        email,
-        password: hashedPassword,
-        name,
-        address,
-        role: "user"
-      });
-
-      const { password: _, ...userWithoutPassword } = user;
-      return res.status(201).json({ 
-        message: "User created successfully", 
-        user: userWithoutPassword 
-      });
     } catch (error) {
       console.error("Signup error:", error);
       return res.status(500).json({ message: "Internal server error" });
