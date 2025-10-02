@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Store, LogOut, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,17 +6,27 @@ import DataTable from "@/components/DataTable";
 import PasswordUpdateDialog from "@/components/PasswordUpdateDialog";
 import StarRating from "@/components/StarRating";
 import ThemeToggle from "@/components/ThemeToggle";
-
-//todo: remove mock functionality
-const mockRatings = [
-  { id: '1', userName: 'John Alexander Smith Johnson', userEmail: 'john@example.com', rating: 5, date: '2024-01-15' },
-  { id: '2', userName: 'Jane Marie Anderson Williams', userEmail: 'jane@example.com', rating: 4, date: '2024-01-14' },
-  { id: '3', userName: 'Bob Christopher Wilson Brown', userEmail: 'bob@example.com', rating: 5, date: '2024-01-13' },
-];
+import { useQuery } from "@tanstack/react-query";
 
 export default function StoreDashboard() {
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const averageRating = 4.5;
+  const [currentStore, setCurrentStore] = useState<any>(null);
+
+  useEffect(() => {
+    const user = localStorage.getItem("currentUser");
+    if (user) {
+      setCurrentStore(JSON.parse(user));
+    }
+  }, []);
+
+  const { data: ratings = [], isLoading: ratingsLoading } = useQuery<any[]>({
+    queryKey: [`/api/stores/${currentStore?.id}/ratings`],
+    enabled: !!currentStore?.id,
+  });
+
+  const averageRating = ratings.length > 0
+    ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+    : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,7 +38,7 @@ export default function StoreDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-semibold">Store Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Downtown Electronics Store</p>
+              <p className="text-sm text-muted-foreground">{currentStore?.name || "Loading..."}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -66,7 +76,7 @@ export default function StoreDashboard() {
             <div className="flex-1 pl-8 border-l">
               <p className="text-sm text-muted-foreground mb-2">Total Ratings</p>
               <p className="text-3xl font-bold" data-testid="text-total-ratings">
-                {mockRatings.length}
+                {ratings.length}
               </p>
             </div>
           </CardContent>
@@ -74,27 +84,36 @@ export default function StoreDashboard() {
 
         <div>
           <h2 className="text-2xl font-semibold mb-4">Customer Ratings</h2>
-          <DataTable
-            data={mockRatings}
-            columns={[
-              { key: 'userName', label: 'Customer Name', sortable: true },
-              { key: 'userEmail', label: 'Email', sortable: true },
-              {
-                key: 'rating',
-                label: 'Rating',
-                sortable: true,
-                render: (row) => (
-                  <div className="flex items-center gap-2">
-                    <StarRating rating={row.rating} readonly size="sm" />
-                    <span className="text-sm font-medium">{row.rating}</span>
-                  </div>
-                ),
-              },
-              { key: 'date', label: 'Date', sortable: true },
-            ]}
-            searchable
-            searchPlaceholder="Search by customer name or email..."
-          />
+          {ratingsLoading ? (
+            <div className="text-center py-8">Loading ratings...</div>
+          ) : (
+            <DataTable
+              data={ratings}
+              columns={[
+                { key: 'userName', label: 'Customer Name', sortable: true },
+                { key: 'userEmail', label: 'Email', sortable: true },
+                {
+                  key: 'rating',
+                  label: 'Rating',
+                  sortable: true,
+                  render: (row) => (
+                    <div className="flex items-center gap-2">
+                      <StarRating rating={row.rating} readonly size="sm" />
+                      <span className="text-sm font-medium">{row.rating}</span>
+                    </div>
+                  ),
+                },
+                { 
+                  key: 'createdAt', 
+                  label: 'Date', 
+                  sortable: true,
+                  render: (row) => new Date(row.createdAt).toLocaleDateString()
+                },
+              ]}
+              searchable
+              searchPlaceholder="Search by customer name or email..."
+            />
+          )}
         </div>
       </main>
 

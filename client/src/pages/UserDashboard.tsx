@@ -35,11 +35,11 @@ export default function UserDashboard() {
   }, []);
 
   const { data: stores = [], isLoading } = useQuery<StoreWithRating[]>({
-    queryKey: ["/api/stores-with-ratings"],
+    queryKey: [`/api/stores-with-ratings`],
   });
 
   const { data: userRatings = [] } = useQuery<any[]>({
-    queryKey: ["/api/users", currentUser?.id, "ratings"],
+    queryKey: [`/api/users/${currentUser?.id}/ratings`],
     enabled: !!currentUser?.id,
   });
 
@@ -78,8 +78,8 @@ export default function UserDashboard() {
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users", currentUser?.id, "ratings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stores-with-ratings"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/users/${currentUser?.id}/ratings`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/stores-with-ratings`] });
       toast({
         title: "Success",
         description: "Rating submitted successfully",
