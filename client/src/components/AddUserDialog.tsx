@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 
 const userSchema = z.object({
-  name: z.string().min(20, "Name must be at least 20 characters").max(60, "Name must not exceed 60 characters"),
+  name: z.string().min(2, "Name must be at least 2 characters").max(60, "Name must not exceed 60 characters"),
   email: z.string().email("Invalid email address"),
   address: z.string().max(400, "Address must not exceed 400 characters"),
   password: z.string()
@@ -77,7 +77,7 @@ export default function AddUserDialog({ open, onOpenChange, onSubmit }: AddUserD
                   <FormLabel>Name</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Enter name (20-60 characters)"
+                      placeholder="Enter name (2-60 characters)"
                       data-testid="input-user-name"
                       {...field}
                     />

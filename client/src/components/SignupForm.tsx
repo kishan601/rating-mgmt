@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 const signupSchema = z.object({
-  name: z.string().min(20, "Name must be at least 20 characters").max(60, "Name must not exceed 60 characters"),
+  name: z.string().min(2, "Name must be at least 2 characters").max(60, "Name must not exceed 60 characters"),
   email: z.string().email("Invalid email address"),
   address: z.string().max(400, "Address must not exceed 400 characters"),
   password: z.string()
@@ -60,7 +60,7 @@ export default function SignupForm({ onSubmit, onLoginClick }: SignupFormProps) 
               <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input
-                  placeholder="Enter your full name (20-60 characters)"
+                  placeholder="Enter your full name (2-60 characters)"
                   data-testid="input-name"
                   {...field}
                 />
