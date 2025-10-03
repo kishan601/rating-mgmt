@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./migrate";
 import { db } from "./db";
+import { exec } from "child_process";
 
 const app = express();
 app.use(express.json());
@@ -64,6 +65,18 @@ app.use((req, res, next) => {
   await runMigrations();
   const server = await registerRoutes(app);
 
+  // Temporary route to push Drizzle schema inside Render
+  app.get("/db-push", (req, res) => {
+    exec("npx drizzle-kit push", { env: process.env }, (err, stdout, stderr) => {
+      if (err) {
+        console.error(stderr);
+        return res.status(500).send(`Error pushing schema:\n${stderr}`);
+      }
+      console.log(stdout);
+      res.send(`Schema pushed successfully:\n${stdout}`);
+    });
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -85,12 +98,15 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen(
+    {
+      port,
+      host: "0.0.0.0",
+      reusePort: true,
+    },
+    () => {
+      log(`serving on port ${port}`);
+    }
+  );
 })();
