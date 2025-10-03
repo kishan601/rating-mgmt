@@ -37,13 +37,16 @@ function requireRole(...roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Signup endpoint
+  // Public signup endpoint - only allows normal users
   app.post("/api/signup", async (req, res) => {
     try {
-      const { accountType, email, password, name, address, confirmPassword } = req.body;
+      const { accountType, email, password, name, address } = req.body;
 
-      if (!accountType || (accountType !== "user" && accountType !== "store" && accountType !== "admin")) {
-        return res.status(400).json({ message: "Invalid account type" });
+      // Only allow "user" account type from public signup
+      if (accountType && accountType !== "user") {
+        return res.status(403).json({ 
+          message: "Only normal user accounts can be created through public signup. Admins can create store and admin accounts." 
+        });
       }
 
       // Check if email already exists in either table
@@ -54,84 +57,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email already registered" });
       }
 
-      if (accountType === "store") {
-        // Validate as store
-        const storeResult = insertStoreSchema.safeParse({ email, password, name, address });
-        
-        if (!storeResult.success) {
-          return res.status(400).json({ 
-            message: "Validation error", 
-            errors: storeResult.error.flatten().fieldErrors 
-          });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const store = await storage.createStore({
-          email,
-          password: hashedPassword,
-          name,
-          address
-        });
-
-        const { password: _, ...storeWithoutPassword } = store;
-        return res.status(201).json({ 
-          message: "Store account created successfully", 
-          user: { ...storeWithoutPassword, role: "store" }
-        });
-      } else if (accountType === "admin") {
-        // Validate as admin user
-        const adminResult = insertUserSchema.safeParse({ email, password, name, address, role: "admin" });
-        
-        if (!adminResult.success) {
-          return res.status(400).json({ 
-            message: "Validation error", 
-            errors: adminResult.error.flatten().fieldErrors 
-          });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const admin = await storage.createUser({
-          email,
-          password: hashedPassword,
-          name,
-          address,
-          role: "admin"
-        });
-
-        const { password: _, ...adminWithoutPassword } = admin;
-        return res.status(201).json({ 
-          message: "Admin account created successfully", 
-          user: adminWithoutPassword 
-        });
-      } else {
-        // Validate as normal user
-        const userResult = insertUserSchema.safeParse({ email, password, name, address });
-        
-        if (!userResult.success) {
-          return res.status(400).json({ 
-            message: "Validation error", 
-            errors: userResult.error.flatten().fieldErrors 
-          });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = await storage.createUser({
-          email,
-          password: hashedPassword,
-          name,
-          address,
-          role: "user"
-        });
-
-        const { password: _, ...userWithoutPassword } = user;
-        return res.status(201).json({ 
-          message: "User account created successfully", 
-          user: userWithoutPassword 
+      // Validate as normal user
+      const userResult = insertUserSchema.safeParse({ email, password, name, address });
+      
+      if (!userResult.success) {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: userResult.error.flatten().fieldErrors 
         });
       }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const user = await storage.createUser({
+        email,
+        password: hashedPassword,
+        name,
+        address,
+        role: "user"
+      });
+
+      const { password: _, ...userWithoutPassword } = user;
+      return res.status(201).json({ 
+        message: "User account created successfully", 
+        user: userWithoutPassword 
+      });
     } catch (error) {
       console.error("Signup error:", error);
       return res.status(500).json({ message: "Internal server error" });
