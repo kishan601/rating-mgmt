@@ -7,6 +7,12 @@ import { runMigrations } from "./migrate";
 import { db } from "./db";
 
 const app = express();
+
+// Health check endpoint - must be first to avoid middleware interference
+app.get("/ping", (req, res) => {
+  res.status(200).send("alive");
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
