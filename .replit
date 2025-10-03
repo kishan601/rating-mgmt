@@ -1,3 +1,4 @@
+modules = ["nodejs-20"]
 [workflows]
 runButton = "Start Dev Server"
 
@@ -36,3 +37,11 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm install"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 46769
+externalPort = 3000
