@@ -98,5 +98,11 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Self-ping keep-alive mechanism
+    setInterval(() => {
+      fetch(`http://localhost:${port}/ping`)
+        .catch(() => {}); // Silent fail
+    }, 2 * 60 * 1000); // Every 2 minutes
   });
 })();
