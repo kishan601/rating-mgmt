@@ -37,15 +37,22 @@ function requireRole(...roles: string[]) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Public signup endpoint - only allows normal users
+  // Public signup endpoint - allows users and store owners (but not admins)
   app.post("/api/signup", async (req, res) => {
     try {
       const { accountType, email, password, name, address } = req.body;
 
-      // Only allow "user" account type from public signup
-      if (accountType && accountType !== "user") {
+      // Block admin accounts from public signup
+      if (accountType === "admin") {
         return res.status(403).json({ 
-          message: "Only normal user accounts can be created through public signup. Admins can create store and admin accounts." 
+          message: "Admin accounts cannot be created through public signup. Contact system administrator." 
+        });
+      }
+
+      // Only allow "user" or "store" account types
+      if (!accountType || !["user", "store"].includes(accountType)) {
+        return res.status(400).json({ 
+          message: "Invalid account type. Must be 'user' or 'store'." 
         });
       }
 
@@ -57,31 +64,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email already registered" });
       }
 
-      // Validate as normal user
-      const userResult = insertUserSchema.safeParse({ email, password, name, address });
-      
-      if (!userResult.success) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: userResult.error.flatten().fieldErrors 
-        });
-      }
-
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      const user = await storage.createUser({
-        email,
-        password: hashedPassword,
-        name,
-        address,
-        role: "user"
-      });
+      // Create user or store based on account type
+      if (accountType === "user") {
+        const userResult = insertUserSchema.safeParse({ email, password, name, address });
+        
+        if (!userResult.success) {
+          return res.status(400).json({ 
+            message: "Validation error", 
+            errors: userResult.error.flatten().fieldErrors 
+          });
+        }
 
-      const { password: _, ...userWithoutPassword } = user;
-      return res.status(201).json({ 
-        message: "User account created successfully", 
-        user: userWithoutPassword 
-      });
+        const user = await storage.createUser({
+          email,
+          password: hashedPassword,
+          name,
+          address,
+          role: "user"
+        });
+
+        const { password: _, ...userWithoutPassword } = user;
+        return res.status(201).json({ 
+          message: "User account created successfully", 
+          user: userWithoutPassword 
+        });
+      } else if (accountType === "store") {
+        const storeResult = insertStoreSchema.safeParse({ email, password, name, address });
+        
+        if (!storeResult.success) {
+          return res.status(400).json({ 
+            message: "Validation error", 
+            errors: storeResult.error.flatten().fieldErrors 
+          });
+        }
+
+        const store = await storage.createStore({
+          email,
+          password: hashedPassword,
+          name,
+          address
+        });
+
+        const { password: _, ...storeWithoutPassword } = store;
+        return res.status(201).json({ 
+          message: "Store account created successfully", 
+          user: { ...storeWithoutPassword, role: "store" }
+        });
+      }
     } catch (error) {
       console.error("Signup error:", error);
       return res.status(500).json({ message: "Internal server error" });
