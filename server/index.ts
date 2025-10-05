@@ -17,24 +17,12 @@ app.get("/ping", (req, res) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS configuration - allow both Replit (dev) and Render (production) frontends
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null,
-].filter(Boolean);
-
+// CORS configuration - allow specific origins
 app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or Postman)
-    if (!origin) return callback(null, true);
-    
-    // Check if origin is in allowed list
-    if (allowedOrigins.some(allowed => origin.startsWith(allowed as string))) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: [
+    'https://rating-mgmt-2.onrender.com',
+    'https://d97f8f0b-4865-4792-8fc5-bc7599e64fc9-00-ocypxkussyi5.pike.replit.dev'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
