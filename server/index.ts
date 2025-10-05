@@ -1,15 +1,49 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./migrate";
 import { db } from "./db";
-import { exec } from "child_process";
 
 const app = express();
+
+// Health check endpoint - must be first to avoid middleware interference
+app.get("/ping", (req, res) => {
+  res.status(200).send("alive");
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// CORS configuration - allow both Replit (dev) and Render (production) frontends
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null,
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+    
+    // In production, if no FRONTEND_URL is set, allow the same origin
+    if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.some(allowed => origin.startsWith(allowed as string))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 const PgSession = connectPgSimple(session);
 
@@ -25,7 +59,7 @@ app.use(
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
   })
@@ -65,18 +99,6 @@ app.use((req, res, next) => {
   await runMigrations();
   const server = await registerRoutes(app);
 
-  // Temporary route to push Drizzle schema inside Render
-  app.get("/db-push", (req, res) => {
-    exec("npx drizzle-kit push", { env: process.env }, (err, stdout, stderr) => {
-      if (err) {
-        console.error(stderr);
-        return res.status(500).send(`Error pushing schema:\n${stderr}`);
-      }
-      console.log(stdout);
-      res.send(`Schema pushed successfully:\n${stdout}`);
-    });
-  });
-
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -98,15 +120,18 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    }
-  );
+  const port = parseInt(process.env.PORT || '5000', 10);
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true,
+  }, () => {
+    log(`serving on port ${port}`);
+    
+    // Self-ping keep-alive mechanism
+    setInterval(() => {
+      fetch(`http://localhost:${port}/ping`)
+        .catch(() => {}); // Silent fail
+    }, 2 * 60 * 1000); // Every 2 minutes
+  });
 })();
