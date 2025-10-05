@@ -28,11 +28,6 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps or Postman)
     if (!origin) return callback(null, true);
     
-    // In production, if no FRONTEND_URL is set, allow the same origin
-    if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
-      return callback(null, true);
-    }
-    
     // Check if origin is in allowed list
     if (allowedOrigins.some(allowed => origin.startsWith(allowed as string))) {
       callback(null, true);
