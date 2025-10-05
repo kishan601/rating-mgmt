@@ -9,6 +9,9 @@ import { db } from "./db";
 
 const app = express();
 
+// CRITICAL: Trust Render's reverse proxy so Express knows it's HTTPS
+app.set('trust proxy', 1);
+
 // Health check endpoint - must be first to avoid middleware interference
 app.get("/ping", (req, res) => {
   res.status(200).send("alive");
