@@ -18,15 +18,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // CORS configuration - allow specific origins
-app.use(cors({
-  origin: [
-    'https://rating-mgmt-2.onrender.com',
-    'https://d97f8f0b-4865-4792-8fc5-bc7599e64fc9-00-ocypxkussyi5.pike.replit.dev'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(
+  cors({
+    origin: [
+      "https://rating-mgmt-2.onrender.com",
+      "https://d97f8f0b-4865-4792-8fc5-bc7599e64fc9-00-ocypxkussyi5.pike.replit.dev",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 const PgSession = connectPgSimple(session);
 
@@ -45,7 +47,7 @@ app.use(
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
-  })
+  }),
 );
 
 app.use((req, res, next) => {
@@ -103,18 +105,23 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-    
-    // Self-ping keep-alive mechanism
-    setInterval(() => {
-      fetch(`http://localhost:${port}/ping`)
-        .catch(() => {}); // Silent fail
-    }, 2 * 60 * 1000); // Every 2 minutes
-  });
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen(
+    {
+      port,
+      host: "0.0.0.0",
+      reusePort: true,
+    },
+    () => {
+      log(`serving on port ${port}`);
+
+      // Self-ping keep-alive mechanism
+      setInterval(
+        () => {
+          fetch(`http://localhost:${port}/ping`).catch(() => {}); // Silent fail
+        },
+        2 * 60 * 1000,
+      ); // Every 2 minutes
+    },
+  );
 })();
