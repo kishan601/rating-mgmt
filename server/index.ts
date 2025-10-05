@@ -17,13 +17,12 @@ app.get("/ping", (req, res) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS configuration - allow specific origins
+// CORS configuration - allow ALL origins with credentials for development
 app.use(
   cors({
-    origin: [
-      "https://rating-mgmt-2.onrender.com",
-      "https://d97f8f0b-4865-4792-8fc5-bc7599e64fc9-00-ocypxkussyi5.pike.replit.dev",
-    ],
+    origin: (origin, callback) => {
+      callback(null, origin || '*');
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -42,9 +41,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      sameSite: "none",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
   }),
