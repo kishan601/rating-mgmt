@@ -6,6 +6,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./migrate";
 import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 const app = express();
 
@@ -13,14 +14,19 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Health check endpoint - must be first to avoid middleware interference
-app.get("/ping", (req, res) => {
-  res.status(200).send("alive");
+app.get("/ping", async (req, res) => {
+  try {
+    await db.execute(sql`SELECT 1`);
+    res.status(200).send("alive");
+  } catch (error) {
+    res.status(500).send("error");
+  }
 });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS configuration - allow ALL origins with credentials for development
+// CORS configuration - allow ALL origins with cookies (showcase project)
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -44,9 +50,9 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
-      sameSite: "none",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
   }),
@@ -116,14 +122,6 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
-
-      // Self-ping keep-alive mechanism
-      setInterval(
-        () => {
-          fetch(`http://localhost:${port}/ping`).catch(() => {}); // Silent fail
-        },
-        2 * 60 * 1000,
-      ); // Every 2 minutes
     },
   );
 })();
